@@ -6,6 +6,7 @@ package hybrid_tcp_tls_conn
 import (
 	"crypto/tls"
 	"net"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -15,6 +16,7 @@ import (
 //Which can change the underlying connection from TCP to TLS if a TLS ClientHello received.
 type Conn struct {
 	connection net.Conn
+	lock       sync.RWMutex
 	tls_config *tls.Config
 	tls        bool
 }
@@ -29,11 +31,13 @@ func (connection *Conn) Read(buffer []byte) (int, error) {
 		log.Trace("Client Hello received")
 		connection_buffer = connection.connection.(*Buffer_Conn)
 		connection_buffer.Set_Buffer(buffer[:length])
+		connection.lock.Lock()
 		connection_tls := tls.Server(connection.connection, connection.tls_config)
 		connection_tls.Handshake()
 		connection.connection = connection_tls
 		log.Trace("TLS Handshake was successful")
 		connection.tls = true
+		connection.lock.Unlock()
 		length, error = connection.connection.Read(buffer)
 	}
 
@@ -43,6 +47,8 @@ func (connection *Conn) Read(buffer []byte) (int, error) {
 
 //Write to the underlying connection.
 func (connection *Conn) Write(buffer []byte) (int, error) {
+	connection.lock.Lock()
+	defer connection.lock.Unlock()
 	length, error := connection.connection.Write(buffer)
 	log.Trace("sent message ", buffer[:length])
 	return length, error
@@ -109,5 +115,5 @@ func (connection *Conn) Get_TLS_Config() *tls.Config {
 //Create_Conn returns a new Conn using connection converted to Buffer_Conn as the underlying connection.
 //The configuration config must be non-nil and must include at least one certificate or else set GetCertificate, if TLS will be added to the connection.
 func Create_Conn(connection net.Conn, tls_config *tls.Config) *Conn {
-	return &Conn{connection: Create_Buffer_Conn(connection), tls_config: tls_config}
+	return &Conn{connection: Create_Buffer_Conn(connection), lock: sync.RWMutex{}, tls_config: tls_config}
 }
