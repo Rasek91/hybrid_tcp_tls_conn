@@ -15,18 +15,18 @@ import (
 	"time"
 )
 
-func tcp_client(message []byte) {
+func tcpClient(message []byte) {
 	client, _ := net.Dial("tcp", "127.0.0.1:8080")
 	client.Write(message)
 }
 
-func tls_client(message []byte) {
-	client_tcp, _ := net.Dial("tcp", "127.0.0.1:8080")
-	client := tls.Client(client_tcp, &tls.Config{InsecureSkipVerify: true})
+func tlsClient(message []byte) {
+	clientTcp, _ := net.Dial("tcp", "127.0.0.1:8080")
+	client := tls.Client(clientTcp, &tls.Config{InsecureSkipVerify: true})
 	client.Write(message)
 }
 
-func Test_Tcp(test *testing.T) {
+func TestTcp(test *testing.T) {
 	message := []byte{0x01, 0x01}
 	listener, error := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 8080})
 
@@ -35,7 +35,7 @@ func Test_Tcp(test *testing.T) {
 	}
 
 	defer listener.Close()
-	go tcp_client(message)
+	go tcpClient(message)
 
 	for {
 		connection, error := listener.Accept()
@@ -44,10 +44,10 @@ func Test_Tcp(test *testing.T) {
 			test.Error("Accept error ", error)
 		}
 
-		connection_hybrid := Create_Conn(connection, nil)
-		defer connection_hybrid.Close()
+		connectionHybrid := New(connection, nil)
+		defer connectionHybrid.Close()
 		buffer := make([]byte, 1024)
-		length, error := connection_hybrid.Read(buffer)
+		length, error := connectionHybrid.Read(buffer)
 
 		if error != nil {
 			test.Error("Read error ", error)
@@ -55,8 +55,8 @@ func Test_Tcp(test *testing.T) {
 
 		test.Log("message", buffer[:length])
 
-		if connection_hybrid.Get_TLS() {
-			test.Error("Get_TLS error")
+		if connectionHybrid.GetTls() {
+			test.Error("GetTls error")
 		}
 
 		if length != len(message) || !reflect.DeepEqual(message, buffer[:length]) {
@@ -67,7 +67,7 @@ func Test_Tcp(test *testing.T) {
 	}
 }
 
-func Test_TLS(test *testing.T) {
+func TestTls(test *testing.T) {
 	ca := &x509.Certificate{
 		SerialNumber: big.NewInt(2019),
 		Subject: pkix.Name{
@@ -86,26 +86,26 @@ func Test_TLS(test *testing.T) {
 		BasicConstraintsValid: true,
 	}
 
-	ca_private_key, error := rsa.GenerateKey(rand.Reader, 4096)
+	caPrivateKey, error := rsa.GenerateKey(rand.Reader, 4096)
 	if error != nil {
 		test.Error("CA Private Key error ", error)
 	}
 
-	ca_bytes, error := x509.CreateCertificate(rand.Reader, ca, ca, &ca_private_key.PublicKey, ca_private_key)
+	caBytes, error := x509.CreateCertificate(rand.Reader, ca, ca, &caPrivateKey.PublicKey, caPrivateKey)
 	if error != nil {
 		test.Error("CA Bytes error ", error)
 	}
 
-	ca_pem := new(bytes.Buffer)
-	pem.Encode(ca_pem, &pem.Block{
+	caPem := new(bytes.Buffer)
+	pem.Encode(caPem, &pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: ca_bytes,
+		Bytes: caBytes,
 	})
 
-	ca_private_key_pem := new(bytes.Buffer)
-	pem.Encode(ca_private_key_pem, &pem.Block{
+	caPrivateKeyPem := new(bytes.Buffer)
+	pem.Encode(caPrivateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(ca_private_key),
+		Bytes: x509.MarshalPKCS1PrivateKey(caPrivateKey),
 	})
 
 	cert := &x509.Certificate{
@@ -126,35 +126,35 @@ func Test_TLS(test *testing.T) {
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
 
-	cert_private_key, error := rsa.GenerateKey(rand.Reader, 4096)
+	certPrivateKey, error := rsa.GenerateKey(rand.Reader, 4096)
 	if error != nil {
 		test.Error("Cert Private Key error ", error)
 	}
 
-	cert_bytes, error := x509.CreateCertificate(rand.Reader, cert, ca, &cert_private_key.PublicKey, ca_private_key)
+	certBytes, error := x509.CreateCertificate(rand.Reader, cert, ca, &certPrivateKey.PublicKey, caPrivateKey)
 	if error != nil {
 		test.Error("Cert Bytes error ", error)
 	}
 
-	cert_pem := new(bytes.Buffer)
-	pem.Encode(cert_pem, &pem.Block{
+	certPem := new(bytes.Buffer)
+	pem.Encode(certPem, &pem.Block{
 		Type:  "CERTIFICATE",
-		Bytes: cert_bytes,
+		Bytes: certBytes,
 	})
 
-	cert_private_key_pem := new(bytes.Buffer)
-	pem.Encode(cert_private_key_pem, &pem.Block{
+	certPrivateKeyPem := new(bytes.Buffer)
+	pem.Encode(certPrivateKeyPem, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(cert_private_key),
+		Bytes: x509.MarshalPKCS1PrivateKey(certPrivateKey),
 	})
 
-	server_cert, error := tls.X509KeyPair(cert_pem.Bytes(), cert_private_key_pem.Bytes())
+	serverCert, error := tls.X509KeyPair(certPem.Bytes(), certPrivateKeyPem.Bytes())
 	if error != nil {
 		test.Error("Server Cert error ", error)
 	}
 
-	server_tls_config := &tls.Config{
-		Certificates: []tls.Certificate{server_cert},
+	serverTlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
 	}
 	test.Log("TLS Cert generated")
 	message := []byte{0x01, 0x01}
@@ -165,7 +165,7 @@ func Test_TLS(test *testing.T) {
 	}
 
 	defer listener.Close()
-	go tls_client(message)
+	go tlsClient(message)
 
 	for {
 		connection, error := listener.Accept()
@@ -174,10 +174,10 @@ func Test_TLS(test *testing.T) {
 			test.Error("Accept error ", error)
 		}
 
-		connection_hybrid := Create_Conn(connection, server_tls_config)
-		defer connection_hybrid.Close()
+		connectionHybrid := New(connection, serverTlsConfig)
+		defer connectionHybrid.Close()
 		buffer := make([]byte, 1024)
-		length, error := connection_hybrid.Read(buffer)
+		length, error := connectionHybrid.Read(buffer)
 
 		if error != nil {
 			test.Error("Read error ", error)
@@ -185,8 +185,8 @@ func Test_TLS(test *testing.T) {
 
 		test.Log("message", buffer[:length])
 
-		if !connection_hybrid.Get_TLS() {
-			test.Error("Get_TLS error")
+		if !connectionHybrid.GetTls() {
+			test.Error("GetTls error")
 		}
 
 		if length != len(message) || !reflect.DeepEqual(message, buffer[:length]) {
